@@ -14,10 +14,11 @@ import {
 import { prompt_for_godot_executable, prompt_for_reload, select_godot_executable } from "../utils/prompts";
 import { killSubProcesses, subProcess } from "../utils/subspawn";
 import GDScriptLanguageClient, { ClientStatus, TargetLSP } from "./GDScriptLanguageClient";
+import { EventEmitter } from "vscode";
 
 const log = createLogger("lsp.manager", { output: "Godot LSP" });
 
-enum ManagerStatus {
+export enum ManagerStatus {
 	INITIALIZING = 0,
 	INITIALIZING_LSP = 1,
 	PENDING = 2,
@@ -31,6 +32,9 @@ enum ManagerStatus {
 export class ClientConnectionManager {
 	public client: GDScriptLanguageClient = null;
 
+	private statusChanged = new EventEmitter<ManagerStatus>();
+	onStatusChanged = this.statusChanged.event;
+
 	private reconnectionAttempts = 0;
 
 	private target: TargetLSP = TargetLSP.EDITOR;
@@ -40,8 +44,7 @@ export class ClientConnectionManager {
 	private connectedVersion = "";
 
 	constructor(private context: vscode.ExtensionContext) {
-		this.client = new GDScriptLanguageClient();
-		this.client.events.on("status", this.on_client_status_changed.bind(this));
+		this.create_new_client();
 
 		setInterval(() => {
 			this.retry_callback();
@@ -68,6 +71,14 @@ export class ClientConnectionManager {
 		);
 
 		this.connect_to_language_server();
+	}
+
+	private create_new_client() {
+		const port = this.client?.port ?? -1;
+		this.client?.events?.removeAllListeners();
+		this.client = new GDScriptLanguageClient();
+		this.client.port = port;
+		this.client.events.on("status", this.on_client_status_changed.bind(this));
 	}
 
 	private async connect_to_language_server() {
@@ -243,7 +254,7 @@ export class ClientConnectionManager {
 				text = "$(check) Connected";
 				tooltip = `Connected to the GDScript language server.\n${lspTarget}`;
 				if (this.connectedVersion) {
-					tooltip += `\n${this.connectedVersion}`;
+					tooltip += `\nGodot version: ${this.connectedVersion}`;
 				}
 				break;
 			case ManagerStatus.DISCONNECTED:
@@ -281,7 +292,9 @@ export class ClientConnectionManager {
 				}
 				break;
 			case ClientStatus.DISCONNECTED:
-				set_context("connectedToLSP", false);
+				// Disconnection is unrecoverable, since the server will not know that the reconnected client is the same.
+				// Create a new client with a clean state to prevent de-sync e.g. of client managed files.
+				this.create_new_client();
 				if (this.retry) {
 					if (this.client.port !== -1) {
 						this.status = ManagerStatus.INITIALIZING_LSP;
@@ -300,6 +313,7 @@ export class ClientConnectionManager {
 			default:
 				break;
 		}
+		this.statusChanged.fire(this.status);
 		this.update_status_widget();
 	}
 
