@@ -122,7 +122,7 @@ export class ServerController {
 	}
 
 	public request_inspect_object(object_id: bigint) {
-		this.send_command("scene:inspect_object", [object_id]);
+		this.send_command("scene:inspect_objects", [[object_id]]);
 	}
 
 	public request_scene_tree() {
@@ -402,6 +402,7 @@ export class ServerController {
 	}
 
 	private async handle_command(command: Command) {
+		socketLog.debug("tr:", command.parameters);
 		switch (command.command) {
 			case "debug_enter": {
 				const reason: string = command.parameters[1];
@@ -431,10 +432,14 @@ export class ServerController {
 				this.session.sceneTree.fill_tree(tree);
 				break;
 			}
-			case "scene:inspect_object": {
-				let godot_id = BigInt(command.parameters[0]);
-				const className: string = command.parameters[1];
-				const properties: string[] = command.parameters[2];
+			// case "scene:inspect_object": {
+			// 	let godot_id = BigInt(command.parameters[0]);
+			// 	const className: string = command.parameters[1];
+			// 	const properties: string[] = command.parameters[2];
+			case "remote_objects_selected": {
+				let godot_id = BigInt(command.parameters[0][0]);
+				const className: string = command.parameters[0][1];
+				const properties: string[] = command.parameters[0][2];
 
 				// message:inspect_object returns the id as an unsigned 64 bit integer, but it is decoded as a signed 64 bit integer,
 				// thus we need to convert it to its equivalent unsigned value here.
@@ -547,6 +552,8 @@ export class ServerController {
 						"Globals",
 						stackVars.Globals,
 					);
+					log.info(local_scopes_godot_id, member_scopes_godot_id, global_scopes_godot_id);
+					log.info(stackVars.Locals, stackVars.Members, stackVars.Globals);
 				}
 				break;
 			}
