@@ -75,6 +75,8 @@ export class ClientConnectionManager {
 
 	private create_new_client() {
 		const port = this.client?.port ?? -1;
+		this.client?.io?.removeAllListeners();
+		this.client?.stop();
 		this.client?.events?.removeAllListeners();
 		this.client = new GDScriptLanguageClient();
 		this.client.port = port;
