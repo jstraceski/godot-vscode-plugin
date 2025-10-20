@@ -220,7 +220,9 @@ export default class GDScriptLanguageClient extends LanguageClient {
 
 	private response_filter(message: ResponseMessage) {
 		const sentMessage = this.sentMessages.get(message.id);
-		if (sentMessage?.method === "textDocument/hover") {
+		if (sentMessage?.method === "textDocument/definition") {
+      log.warn("Connected LSP is a different workspace");
+		} else if (sentMessage?.method === "textDocument/hover") {
 			// fix markdown contents
 			let value: string = (message as HoverResponseMesssage).result.contents.value;
 			if (value) {
@@ -317,6 +319,29 @@ export default class GDScriptLanguageClient extends LanguageClient {
 		};
 		const response = await this.send_request("textDocument/hover", params);
 		return this.parse_hover_result(response as HoverResult);
+	}
+
+
+	public async get_symbol_at_position_raw(
+		uri: vscode.Uri,
+		position: vscode.Position
+	) {
+		const params = {
+			textDocument: { uri: uri.toString() },
+			position: { line: position.line, character: position.character },
+		};
+		return await this.send_request("textDocument/completion", params);
+	}
+
+	public async get_function_at_position(
+		uri: vscode.Uri,
+		position: vscode.Position
+	) {
+		const params = {
+			textDocument: { uri: uri.toString() },
+			position: { line: position.line, character: position.character },
+		};
+		return await this.send_request("textDocument/signatureHelp", params);
 	}
 
 	private parse_hover_result(message: HoverResult) {

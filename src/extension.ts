@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { CompletionItem, CompletionItemKind, languages } from "vscode";
 import { attemptSettingsUpdate, get_extension_uri, clean_godot_path } from "./utils";
 import {
 	GDInlayHintsProvider,
@@ -28,9 +29,13 @@ import {
 	get_project_version,
 	verify_godot_version,
 	convert_uri_to_resource_path,
+	createLogger,
 } from "./utils";
 import { prompt_for_godot_executable } from "./utils/prompts";
 import { killSubProcesses, subProcess } from "./utils/subspawn";
+import { match } from "node:assert";
+
+const log = createLogger("lsp.client", { output: "Godot LSP" });
 
 interface Extension {
 	context?: vscode.ExtensionContext;
@@ -65,10 +70,12 @@ export function activate(context: vscode.ExtensionContext) {
 	globals.formattingProvider = new FormattingProvider(context);
 	globals.docsProvider = new GDDocumentationProvider(context);
 	globals.definitionProvider = new GDDefinitionProvider(context);
-	// globals.semanticTokensProvider = new GDSemanticTokensProvider(context);
-	// globals.completionProvider = new GDCompletionItemProvider(context);
-	// globals.tasksProvider = new GDTaskProvider(context);
 
+	const selector = [
+		{ language: "gdresource", scheme: "file" },
+		{ language: "gdscene", scheme: "file" },
+		{ language: "gdscript", scheme: "file" },
+	];
 	context.subscriptions.push(
 		register_command("openEditor", open_workspace_with_editor),
 		register_command("openEditorSettings", open_godot_editor_settings),
@@ -76,6 +83,27 @@ export function activate(context: vscode.ExtensionContext) {
 		register_command("listGodotClasses", list_classes),
 		register_command("switchSceneScript", switch_scene_script),
 		register_command("getGodotPath", get_godot_path),
+		register_command("generateDocComment", generate_doc_comment),
+		languages.registerCompletionItemProvider(
+			selector,
+			{
+				provideCompletionItems(document, position) {
+					const linePrefix = document.lineAt(position).text.substring(0, position.character);
+					// Trigger suggestions after typing "##"
+					if (!linePrefix.endsWith("##")) {
+						return undefined;
+					}
+
+					// Return custom completion items
+					const customTag = new CompletionItem("Generate docstring.", CompletionItemKind.Snippet);
+					customTag.insertText = generate_doc_comment_snippet(document, position, " ");
+					customTag.documentation = "A custom documentation tag.";
+					return [customTag];
+				},
+			},
+			"e",
+			"#",
+		),
 	);
 
 	set_context("godotFiles", ["gdscript", "gdscene", "gdresource", "gdshader"]);
@@ -121,6 +149,49 @@ export function deactivate(): Thenable<void> {
 		globals.lsp.client.stop();
 		resolve();
 	});
+}
+
+async function generate_doc_comment() {
+	log.debug("GENERATE DOC COMMENT!!!!!");
+	const editor = vscode.window.activeTextEditor;
+	if (!editor) {
+		return;
+	}
+	const document = editor.document;
+	const position = editor.selection.active;
+	const snippet = generate_doc_comment_snippet(document, position, "\n## ");
+	let previous_line_index = 0;
+	for (let i = position.line + 1; i > 0; i--) {
+		const line = document.lineAt(i);
+		const function_def = line.text.match(/.*func.*/);
+		if (function_def != null) {
+			previous_line_index = i - 1;
+			break;
+		}
+	}
+	editor.insertSnippet(snippet, new vscode.Position(previous_line_index, 0));
+}
+
+function generate_doc_comment_snippet(document: vscode.TextDocument, position: vscode.Position, prefix: string) {
+	const editor = vscode.window.activeTextEditor;
+	let param_section = "";
+	for (let i = position.line; i < document.lineCount; i++) {
+		const line = document.lineAt(i);
+		const function_def = line.text.match(/\)(?:[ ]*->)*[ ]*([^#\r\n]*):/);
+		let count = 2;
+		for (const f of line.text.matchAll(/([\w-]+)(?::[ ]*([\w]*))*(?:[ ]*=[ ]*[^ ]*?)*?(?:,|\))/g)) {
+			param_section += `[br]\n## * @param ${f[1]}: \${${count}:}`;
+			count += 1;
+		}
+		if (function_def == null) continue;
+		const return_value = function_def[1].trim();
+		if (return_value !== "void" && return_value !== "") {
+			param_section += `[br]\n## @return \${${count}:}`;
+		}
+		break;
+	}
+	const snippet_string = `${prefix}\${1:}${param_section}`;
+	return new vscode.SnippetString(snippet_string);
 }
 
 async function copy_resource_path(uri: vscode.Uri) {

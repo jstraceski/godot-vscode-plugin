@@ -196,6 +196,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 
 	protected stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
 		log.info("stackTraceRequest", args);
+		this.variables_manager.godot_object_promises.clear();
 		if (this.debug_data.last_frame) {
 			response.body = {
 				totalFrames: this.debug_data.last_frames.length,
@@ -217,6 +218,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 
 	protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments) {
 		log.info("scopesRequest", args);
+		this.variables_manager.godot_object_promises.clear();
 		// this.variables_manager.variablesFrameId = args.frameId;
 
 		// TODO: create scopes dynamically for a given frame

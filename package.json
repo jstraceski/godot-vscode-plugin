@@ -244,14 +244,23 @@
 				"category": "Godot Tools",
 				"command": "godotTools.copyResourcePath",
 				"title": "Copy Resource Path"
-			}
+			},
+			{
+        "command": "godotTools.generateDocComment",
+        "title": "Generate Documentation Comment"
+      }
 		],
 		"keybindings": [
 			{
 				"command": "godotTools.switchSceneScript",
 				"key": "alt+o",
 				"when": "editorLangId in godotTools.context.godotFiles && editorTextFocus"
-			}
+			},
+      {
+        "command": "godotTools.generateDocComment",
+        "key": "ctrl+shift+g",
+        "when": "editorTextFocus && editorLangId in godotTools.context.godotFiles"
+      }
 		],
 		"configuration": {
 			"type": "object",
